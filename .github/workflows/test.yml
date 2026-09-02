@@ -1,0 +1,12 @@
+name: AI Proxy
+
+on:
+  repository_dispatch:
+    types: [analyze]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: echo "Hello from ${{ github.event_name }}"
