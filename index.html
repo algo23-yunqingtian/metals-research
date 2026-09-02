@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>有色金属六维闭环投研工具</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:-apple-system,"Segoe UI","Microsoft YaHei",Roboto,sans-serif;background:#F7F8FA;color:#1F2937;font-size:14px;line-height:1.6}
+#app{max-width:1600px;margin:0 auto;padding:16px 20px;height:100vh;display:flex;flex-direction:column}
+#page-title{text-align:center;color:#4472C4;font-size:22px;font-weight:700;padding:8px 0 12px;letter-spacing:1px}
+#main{display:flex;gap:16px;flex:1;min-height:0;flex-direction:row}
+#left-col{flex:0 0 60%;display:flex;flex-direction:column;min-height:0;gap:12px}
+#right-col{flex:1;display:flex;flex-direction:column;min-height:0;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:12px}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);padding:14px 18px}
+#output-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+#output-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
+#copy-btn{padding:6px 16px;background:#4472C4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;transition:background .15s}
+#copy-btn:hover{background:#3660a8}
+#output{flex:1;min-height:0;overflow-y:auto;padding:6px 0}
+#output table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px}
+#output th,#output td{border:1px solid #dfe3ea;padding:6px 8px;text-align:center}
+#output th{background:#4472C4;color:#fff;font-weight:600}
+#output tr:nth-child(even) td{background:#f3f6fb}
+#output pre{background:#f3f6fb;border-radius:8px;padding:10px 12px;overflow-x:auto;font-size:12px;border:1px solid #e1e5eb;margin:8px 0}
+#output h1,#output h2,#output h3,#output h4{color:#4472C4;margin:10px 0 6px}
+#output code{background:#eef2f8;padding:1px 5px;border-radius:4px;font-size:12.5px}
+#input-area{display:flex;gap:10px;align-items:stretch}
+#query-input{flex:1;padding:10px 14px;border:1px solid #dfe3ea;border-radius:8px;font-size:14px;outline:none;background:#fff;font-family:inherit;resize:none}
+#query-input:focus{border-color:#4472C4;box-shadow:0 0 0 3px rgba(68,114,196,.15)}
+#submit-btn{padding:10px 22px;background:#4472C4;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;transition:background .15s}
+#submit-btn:hover:not(:disabled){background:#3660a8}
+#submit-btn:disabled{opacity:.6;cursor:not-allowed}
+#radar-container{flex:1;min-height:0;width:100%}
+#radar-placeholder{display:flex;align-items:center;justify-content:center;height:100%;color:#9aa3af;font-size:13px;text-align:center;padding:20px}
+.toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.toast.show{opacity:1}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #dfe3ea;border-top-color:#4472C4;border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:768px){
+  #main{flex-direction:column}
+  #left-col{flex:none;flex-direction:column}
+  #right-col{min-height:340px}
+  #output-wrap{max-height:400px}
+  #input-area{flex-direction:column}
+  #submit-btn{align-self:stretch}
+  html,body{height:auto}
+  #app{height:auto;padding:10px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="page-title">有色金属六维闭环投研工具</div>
+  <div id="main">
+    <div id="left-col">
+      <div class="card" id="output-wrap">
+        <div id="output-toolbar">
+          <button id="copy-btn">一键复制</button>
+        </div>
+        <div id="output">
+          <p style="color:#9aa3af;margin:20px 0;text-align:center">输入查询指令，例如：<b style="color:#4472C4">分析锡，客户类型：内部业务同事</b>，点击提交后生成六维闭环投研分析报告。</p>
+        </div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <textarea id="query-input" rows="3" placeholder="请输入查询指令，例如：分析锡，客户类型：内部业务同事"></textarea>
+        <div id="input-area">
+          <button id="submit-btn">提交分析</button>
+        </div>
+      </div>
+    </div>
+    <div id="right-col">
+      <div id="radar-placeholder">雷达图将在此渲染</div>
+      <div id="radar-container"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// =============================================================
+// 使用者手动修改下面 3 个配置为公网 Agent 信息
+// API_BASE_URL 必须是公网可访问的 OpenAI 兼容接口地址（以 /v1 结尾）
+// API_KEY     填写你的 Agent Token
+// MODEL_NAME  填写模型 ID
+// =============================================================
+const API_BASE_URL = "https://token.sensenova.cn/v1";
+const API_KEY      = "sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb";
+const MODEL_NAME   = "sensenova-6.8-flash-lite";
+// =============================================================
+
+const DEFAULT_CLIENT = "内部业务同事";
+
+const SYSTEM_PROMPT = `你是一名资深有色金属分析师，使用【六维闭环周期分析模型】输出投研分析报告，面向公司业务同事，帮助他们服务客户、建立信任、促进客户转化。
+
+六个分析维度，按顺时针顺序：供应弹性 → 需求弹性 → 产业链利润 → 产业库存 → 盘面投机参与强度 → 验证指标是否生效，闭环循环。维度分值范围 1‑10 分。
+
+## 品种基准参数
+铜：供应弹性 3，需求弹性 4，产业链利润 8，产业库存 3，盘面投机参与强度 7，验证指标是否生效 8。补充基本面：TC 加工费深度负值（-182 美元/干吨），冶炼利润承压但矿端约束未解，LME 铜价创历史新高（$14,290/吨），国内社会库存 12.87 万吨持续去化，投机资金活跃但现货升水双高压制下游，验证指标基本生效。
+铝：供应弹性 5，需求弹性 6，产业链利润 7，产业库存 4，盘面投机参与强度 5，验证指标是否生效 7。补充基本面：供应弹性较高（电解铝产能可调节），需求端 AI 算力 + 金九旺季双驱动，冶炼利润尚可（氧化铝成本端支撑），库存去化中（仓单 26.25 万吨递减），投机强度中等，验证指标较生效。
+铅：供应弹性 4，需求弹性 3，产业链利润 5，产业库存 5，盘面投机参与强度 3，验证指标是否生效 6。补充基本面：供应弹性中等（再生铅开工率 28% 低位），需求端汽车启动电池刚需，冶炼利润中性（废电瓶成本刚性），库存高位（仓单 5.7 万吨），投机强度低，验证指标中等生效。
+锌：供应弹性 4，需求弹性 4，产业链利润 3，产业库存 6，盘面投机参与强度 6，验证指标是否生效 7。补充基本面：TC 加工费负值压缩冶炼利润（-536 元/吨），减产预期增强，库存压力较大（仓单 11.47 万吨增加），投机强度较高（资金做多情绪升温），验证指标较生效但需关注 9 月减产落地。
+锡：供应弹性 2，需求弹性 5，产业链利润 9，产业库存 2，盘面投机参与强度 8，验证指标是否生效 9。补充基本面：供应弹性最低（矿端刚性，缅甸复产偏缓），AI 算力需求驱动（MLCC 涨价 30%），冶炼利润高（锡价 42,598 元/吨），库存低位（仓单 5,564 吨），投机强度最高（持仓波动剧烈），验证指标充分生效。
+镍：供应弹性 6，需求弹性 5，产业链利润 4，产业库存 7，盘面投机参与强度 7，验证指标是否生效 5。补充基本面：供应弹性高（印尼产能释放），需求端不锈钢 + 新能源双轮驱动，冶炼利润承压（LME 库存高位），库存压力最大（仓单 10.18 万吨），投机强度较高，验证指标部分生效（远期过剩预期压制）。
+碳酸锂：供应弹性 7，需求弹性 7，产业链利润 2，产业库存 8，盘面投机参与强度 9，验证指标是否生效 4。补充基本面：供应弹性最高（盐湖 + 矿端产能释放），需求端电池排产环比增 5.71%，全产业链深度亏损（价格 15 万/吨），库存压力最大（仓单 4.19 万手增加），投机强度最高（保证金 23% 为全市场最高），验证指标未生效（远期过剩定价与近期去库撕裂）。
+多晶硅：供应弹性 8，需求弹性 8，产业链利润 1，产业库存 9，盘面投机参与强度 6，验证指标是否生效 3。补充基本面：供应弹性最高（光伏产能过剩），需求端 6 月装机同比降 13.1%，全产业链深度亏损（价格 37,850 元/吨），库存压力最大（仓单 2.325 万手增加），投机强度中等，验证指标未生效（远期过剩预期未改）。
+
+## 客户类型共 4 类
+1. 产业实体客户：重点解读供应弹性、产业链利润、产业库存，弱化盘面投机；面向实体企业做套保、采购参考。
+2. 交易投机客户：重点解读盘面投机参与强度、验证指标有效性，提示矛盾与风险。
+3. 初级小白客户：语言通俗，减少专业黑话，讲清楚核心利多利空。
+4. 内部业务同事：兼顾产业 + 盘面，输出可直接用于和客户沟通的话术，附带关键跟踪指标清单。
+
+用户不指定客户类型时，默认输出【内部业务同事】版本。
+
+## 输出硬性规则
+1. 严格遵循顺时针维度逻辑行文：供应弹性→需求弹性→产业链利润→产业库存→盘面投机参与强度→验证指标是否生效，体现逻辑因果链条。
+2. 总文字输出控制在 500 字以内，拒绝冗余，观点必须和品种打分、基本面完全一致。
+3. 输出固定顺序：
+①核心一句话结论
+②Markdown 打分表格（列：维度|分值(1-10)|简要说明）
+③环形逻辑分析解读
+④输出完整可直接渲染的 ECharts radar option JSON 代码块，使用 ```json 包裹，不要额外修饰。radar 的 indicator 必须包含六个维度：供应弹性、需求弹性、产业链利润、产业库存、盘面投机参与强度、验证指标是否生效，max 均为 10，series.data[0].value 为对应六个维度分值数组。
+4. 末尾强制带上免责声明：本内容仅模型投研演示，不构成任何投资建议。`;
+
+const DIMENSIONS = ["供应弹性","需求弹性","产业链利润","产业库存","盘面投机参与强度","验证指标是否生效"];
+const COLORS = ["#4472C4","#4472C4","#4472C4","#4472C4","#4472C4","#4472C4"];
+
+const outputEl = document.getElementById("output");
+const queryInput = document.getElementById("query-input");
+const submitBtn = document.getElementById("submit-btn");
+const copyBtn = document.getElementById("copy-btn");
+const toastEl = document.getElementById("toast");
+const radarEl = document.getElementById("radar-container");
+const radarPlaceholder = document.getElementById("radar-placeholder");
+
+let lastRenderedText = "";
+let chart = echarts.init(radarEl);
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastEl._timer);
+  toastEl._timer = setTimeout(()=>toastEl.classList.remove("show"),1800);
+}
+
+function renderMarkdown(text){
+  lastRenderedText = text;
+  outputEl.innerHTML = marked.parse(text);
+}
+
+function renderRadar(value){
+  radarPlaceholder.style.display = "none";
+  radarEl.style.display = "block";
+  chart.setOption({
+    color: ["#4472C4"],
+    tooltip: {},
+    legend: { data: [DIMENSIONS[0]], bottom: 4, textStyle: { color: "#1F2937", fontSize: 12 } },
+    radar: {
+      center: ["50%","48%"],
+      radius: "64%",
+      indicator: DIMENSIONS.map(d=>({ name: d, max: 10 })),
+      axisName: { color: "#1F2937", fontSize: 12, fontWeight: 600 },
+      splitLine: { lineStyle: { color: "#dfe3ea" } },
+      splitArea: { areaStyle: { color: ["#f7f8fa","#ffffff"] } },
+      axisLine: { lineStyle: { color: "#dfe3ea" } }
+    },
+    series: [{
+      name: "六维评分",
+      type: "radar",
+      symbol: "circle",
+      symbolSize: 6,
+      lineStyle: { width: 2 },
+      areaStyle: { color: "rgba(68,114,196,0.22)" },
+      itemStyle: { color: "#4472C4" },
+      data: [{ value: value, name: "六维评分" }]
+    }]
+  });
+  chart.resize();
+}
+
+function clearRadar(){
+  chart.setOption({ series:[], radar:{} });
+  radarPlaceholder.style.display = "flex";
+  radarEl.style.display = "none";
+}
+clearRadar();
+
+function extractRadarValues(text){
+  const patterns = [
+    /```json\s*\n([\s\S]*?)\n```/,
+    /```json\s*([\s\S]*?)```/,
+    /```[\s\S]*?"radar"[^\n]*\n([\s\S]*?)\n```/,
+    /```([\s\S]*?)```/
+  ];
+  for(const p of patterns){
+    const m = text.match(p);
+    if(m){
+      try{
+        const obj = JSON.parse(m[1]);
+        if(obj && obj.radar && obj.series){
+          const v = obj.series[0] && obj.series[0].data && obj.series[0].data[0] && obj.series[0].data[0].value;
+          if(Array.isArray(v) && v.length>=6) return v.slice(0,6);
+        }
+      }catch(e){}
+    }
+  }
+  return null;
+}
+
+function normalizeDimensions(values){
+  const result = [];
+  const lower = DIMENSIONS.map(d=>d.toLowerCase().replace(/[^\u4e00-\u9fa5a-z0-9]/g,""));
+  for(const v of values){
+    const num = Math.max(1, Math.min(10, Math.round(Number(v)||0)));
+    result.push(num);
+  }
+  return result.slice(0,6);
+}
+
+async function submit(){
+  const query = queryInput.value.trim();
+  if(!query){ showToast("请输入查询指令"); return; }
+  if(API_BASE_URL.includes("example") || API_KEY === "YOUR_AGENT_TOKEN"){
+    renderMarkdown("> ⚠️ **API 配置未就绪**\n>\n请先在源代码顶部修改 `API_BASE_URL`、`API_KEY`、`MODEL_NAME` 三个配置为有效的公网 Agent 信息后再提交。\n>\n```js\nconst API_BASE_URL = \"https://your-api.example.com/v1\";\nconst API_KEY      = \"YOUR_AGENT_TOKEN\";\nconst MODEL_NAME   = \"your-model-id\";\n```");
+    return;
+  }
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner"></span>分析中，请稍候…';
+  outputEl.innerHTML = '<p style="color:#9aa3af;text-align:center;margin:20px 0"><span class="spinner"></span>分析中，请稍候…</p>';
+  clearRadar();
+  try{
+    const resp = await fetch(`${API_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: query }
+        ],
+        temperature: 0.4,
+        max_tokens: 2000
+      })
+    });
+    if(!resp.ok){
+      const errText = await resp.text().catch(()=>resp.status.toString());
+      throw new Error(`API 请求失败（HTTP ${resp.status}）：${errText.slice(0,300)}`);
+    }
+    const data = await resp.json();
+    const text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "（模型未返回有效内容）";
+    renderMarkdown(text);
+    const values = extractRadarValues(text);
+    if(values){
+      renderRadar(normalizeDimensions(values));
+    }
+  }catch(err){
+    renderMarkdown(`> ❌ **分析出错**\n>\n\`${err.message}\`\n>\n请检查 API 配置、网络连接或稍后重试。`);
+  }finally{
+    submitBtn.disabled = false;
+    submitBtn.textContent = "提交分析";
+  }
+}
+
+submitBtn.addEventListener("click", submit);
+queryInput.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && (e.ctrlKey || e.metaKey)){ e.preventDefault(); submit(); }
+});
+
+copyBtn.addEventListener("click", async()=>{
+  const text = lastRenderedText || outputEl.innerText || "";
+  if(!text.trim()) return showToast("暂无内容可复制");
+  try{
+    await navigator.clipboard.writeText(text);
+    showToast("已复制到剪贴板 ✓");
+  }catch(e){
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    showToast("已复制到剪贴板 ✓");
+  }
+});
+
+window.addEventListener("resize", ()=>{ chart.resize(); });
+</script>
+</body>
+</html>
