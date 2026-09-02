@@ -10,9 +10,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Call API
         run: |
-          set -e
-          QUERY=$(head -1 query.txt)
-          echo "Query: $QUERY"
           python3 << 'PYEOF'
           import json, urllib.request, time, sys
           query = open("query.txt").read().strip()
@@ -36,14 +33,20 @@ jobs:
               except Exception as e:
                   print("Attempt", attempt+1, "failed:", str(e)[:100])
                   time.sleep(5)
-          print("ALL ATTEMPTS FAILED")
           sys.exit(1)
           PYEOF
-      - name: Save via gh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "GH_TOKEN len: ${#GH_TOKEN}"
-          ls -la analysis_output.md
-          gh api repos/algo23-yunqingtian/metals-research/contents/analysis_output.md --method PUT --field message=Update --field content=$(base64 -w0 analysis_output.md) --field branch=main
-          echo "SAVED"
+      - name: Save via github-script
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const content = fs.readFileSync("analysis_output.md", "utf8");
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: "algo23-yunqingtian",
+              repo: "metals-research",
+              path: "analysis_output.md",
+              message: "Update analysis",
+              content: Buffer.from(content).toString("base64"),
+              branch: "main"
+            });
+            console.log("SAVED");
