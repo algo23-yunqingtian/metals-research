@@ -28,31 +28,43 @@ jobs:
           data = json.loads(resp.read())
           content = data.get("choices", [{"message": {"content": ""}}])[0].get("message", {}).get("content", "")
           open("analysis_output.md", "w").write(content)
-          print("DONE")
+          print("API DONE, length:", len(content))
           PYEOF
-      - name: Save result
+      - name: Save result via python
         env:
-          TOKEN: $***
+          TOKEN: *** GITHUB_TOKEN }}
         run: |
-          set -e
-          B64=$(base64 -w0 analysis_output.md)
-          echo "B64 length: ${#B64}"
-          GET_RESP=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md")
-          echo "GET response: ${GET_RESP:0:100}"
-          SHA=$(echo "$GET_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
-          echo "SHA: $SHA"
-          if [ -n "$SHA" ] && [ "$SHA" != "None" ]; then
-            echo "Updating existing file"
-            PUT_RESP=$(curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\": \"Update\", \"content\": \"$B64\", \"sha\": \"$SHA\", \"branch\": \"main\"}")
-          else
-            echo "Creating new file"
-            PUT_RESP=$(curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
-              -H "Authorization: Bearer $TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\": \"Create\", \"content\": \"$B64\", \"branch\": \"main\"}")
-          fi
-          echo "PUT response: ${PUT_RESP:0:200}"
-          echo "SAVED"
+          python3 << 'PYEOF'
+          import json, urllib.request, base64, os
+          with open("analysis_output.md", "rb") as f:
+              b64 = base64.b64encode(f.read()).decode()
+          token = os.environ["TOKEN"]
+          print("TOKEN present:", bool(token), "len:", len(token))
+          print("B64 length:", len(b64))
+
+          url = "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md"
+
+          try:
+              get_resp = urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer " + token}))
+              get_data = json.loads(get_resp.read())
+              sha = get_data.get("sha", "")
+              print("Current SHA:", sha[:20] if sha else "empty")
+          except urllib.error.HTTPError as e:
+              sha = ""
+              print("File not found, creating new. Status:", e.code)
+
+          body = json.dumps({
+              "message": "Update analysis",
+              "content": b64,
+              "sha": sha,
+              "branch": "main"
+          }).encode()
+          req = urllib.request.Request(url, data=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}, method="PUT")
+          try:
+              put_resp = urllib.request.urlopen(req)
+              put_data = json.loads(put_resp.read())
+              print("PUT OK, sha:", put_data.get("content", {}).get("sha", ""))
+          except urllib.error.HTTPError as e:
+              print("PUT error:", e.code, e.read().decode()[:200])
+          print("SAVED")
+          PYEOF
