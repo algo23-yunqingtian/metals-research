@@ -42,6 +42,6 @@ jobs:
           echo "Step 3: Save"
           B64=$(base64 -w0 analysis_output.md)
           echo "B64 length: ${#B64}"
-          SAVE_RESP=$(curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}")
-          echo "Save response: ${SAVE_RESP:0:300}"
+          SAVE_CODE=$(curl -s -f -w "%{http_code}" -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}")
+          echo "Save code: $SAVE_CODE"
           echo "SAVED"
