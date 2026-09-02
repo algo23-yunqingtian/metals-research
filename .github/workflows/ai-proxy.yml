@@ -36,9 +36,5 @@ jobs:
           echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
           B64=$(base64 -w0 analysis_output.md)
           echo "B64 length: ${#B64}"
-          RESP=$(curl -s -w "\n%{http_code}" -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \\
-            -H "Authorization: Bearer $GITHUB_TOKEN" \\
-            -H "Content-Type: application/json" \\
-            -d "{\"message\": \"Update\", \"content\": \"$B64\", \"branch\": \"main\"}")
-          echo "Response: $RESP"
+          curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\": \"Update\", \"content\": \"$B64\", \"branch\": \"main\"}"
           echo "SAVED"
