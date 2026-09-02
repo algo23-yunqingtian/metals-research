@@ -31,27 +31,14 @@ jobs:
           print("API DONE, length:", len(content))
           PYEOF
       - name: Save via API
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -e
+          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
           B64=$(base64 -w0 analysis_output.md)
           echo "B64 length: ${#B64}"
-          python3 << 'PYEOF'
-          import json, urllib.request, base64, os
-          with open("analysis_output.md", "rb") as f:
-              b64 = base64.b64encode(f.read()).decode()
-          token = os.environ["GH_TOKEN"]
-          print("TOKEN len:", len(token) if token else 0)
-          url = "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md"
-          body = json.dumps({"message": "Update", "content": b64, "branch": "main"}).encode()
-          req = urllib.request.Request(url, data=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}, method="PUT")
-          try:
-              resp = urllib.request.urlopen(req)
-              data = json.loads(resp.read())
-              print("OK sha:", data.get("content", {}).get("sha", ""))
-          except urllib.error.HTTPError as e:
-              err = e.read().decode()[:300]
-              print("HTTP", e.code, err)
-              raise
-          PYEOF
+          RESP=$(curl -s -w "\n%{http_code}" -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \\
+            -H "Authorization: Bearer $GITHUB_TOKEN" \\
+            -H "Content-Type: application/json" \\
+            -d "{\"message\": \"Update\", \"content\": \"$B64\", \"branch\": \"main\"}")
+          echo "Response: $RESP"
+          echo "SAVED"
