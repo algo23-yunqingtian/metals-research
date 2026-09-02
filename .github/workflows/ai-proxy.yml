@@ -8,45 +8,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Call API and Save
+      - name: Run analysis
         run: |
-          python3 << 'PYEOF'
-          import json, urllib.request, base64, os, time, sys
-          # Call sensenova API
-          query = open("query.txt").read().strip()
-          payload = json.dumps({
-              "model": "sensenova-6.8-flash-lite",
-              "messages": [
-                  {"role": "system", "content": "You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3."},
-                  {"role": "user", "content": query}
-              ],
-              "max_tokens": 2000
-          }).encode()
-          for attempt in range(3):
-              try:
-                  req = urllib.request.Request("https://token.sensenova.cn/v1/chat/completions", data=payload, headers={"Content-Type": "application/json", "Authorization": "Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb"}, method="POST")
-                  resp = urllib.request.urlopen(req, timeout=60)
-                  data = json.loads(resp.read())
-                  content = data.get("choices", [{"message": {"content": ""}}])[0].get("message", {}).get("content", "")
-                  break
-              except Exception as e:
-                  print("Attempt", attempt+1, "failed:", str(e)[:100])
-                  time.sleep(5)
-                  content = ""
-          open("analysis_output.md", "w").write(content)
-          print("API DONE, length:", len(content))
-          # Save to GitHub via API
-          token = os.environ.get("GITHUB_TOKEN", "")
-          print("GITHUB_TOKEN len:", len(token))
-          b64 = base64.b64encode(content.encode()).decode()
-          url = "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md"
-          body = json.dumps({"message": "Update", "content": b64, "branch": "main"}).encode()
-          req = urllib.request.Request(url, data=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}, method="PUT")
-          try:
-              resp = urllib.request.urlopen(req)
-              data = json.loads(resp.read())
-              print("SAVED sha:", data.get("content", {}).get("sha", ""))
-          except urllib.error.HTTPError as e:
-              print("SAVE HTTP", e.code, e.read().decode()[:300])
-              raise
-          PYEOF
+          set -e
+          QUERY=$(head -1 query.txt)
+          echo "Query: $QUERY"
+          echo "Step 1: Call sensenova API"
+          RESPONSE=$(curl -s --max-time 60 -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d "{\"model\":\"sensenova-6.8-flash-lite\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3.\"},{\"role\":\"user\",\"content\":\"$QUERY\"}],\"max_tokens\":2000}")
+          echo "Response length: ${#RESPONSE}"
+          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('choices', [{'message': {'content': ''}}])[0].get('message', {}).get('content', ''))")
+          echo "Content length: ${#CONTENT}"
+          echo "$CONTENT" > analysis_output.md
+          echo "Step 2: Save to GitHub"
+          B64=$(base64 -w0 analysis_output.md)
+          curl -s --max-time 30 -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}"
+          echo "SAVED"
