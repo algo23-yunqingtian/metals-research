@@ -1,54 +1,41 @@
 name: "AI Proxy"
 
 "on":
-  repository_dispatch:
-    types: [analyze]
+  push:
+    paths:
+      - 'query.txt'
 
 jobs:
   proxy:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Call AI API
         shell: bash
         run: |
-          echo "Query: ${{ github.event.client_payload.query }}"
-
-          QUERY='${{ github.event.client_payload.query }}'
-          API_KEY='${{ github.event.client_payload.api_key }}'
+          QUERY=$(cat query.txt | head -1)
+          echo "Query: $QUERY"
 
           cat > /tmp/sys.txt << 'EOF'
-You are a senior non-ferrous metals analyst using the Six-Dimension Closed-Loop Analysis Model. Output analysis reports for business colleagues.
+You are a senior non-ferrous metals analyst. Output analysis using Six-Dimension model (1-10 scores): Supply Elasticity, Demand Elasticity, Industry Profit, Inventory, Speculation Intensity, Verification.
 
-Six dimensions clockwise: Supply Elasticity, Demand Elasticity, Industry Chain Profit, Industry Inventory, Speculative Intensity, Verification Effectiveness. Score 1-10.
+## Baseline
+Copper: 3,4,8,3,7,8. TC -182 USD/DT, LME $14,290/t record, inventory 1.287M tons down.
+Aluminum: 5,6,7,4,5,7. AI+Golden Sept demand, warehouse 262.5K tons down.
+Lead: 4,3,5,5,3,6. Secondary lead 28%, auto battery demand, warehouse 57K tons.
+Zinc: 4,4,3,6,6,7. TC -536 yuan/t, cuts expected, warehouse 114.7K tons up.
+Tin: 2,5,9,2,8,9. Mine rigid, AI+MLCC +30%, price 42,598 yuan/t, warehouse 5,564 tons.
+Nickel: 6,5,4,7,7,5. Indonesia supply, stainless+EV, warehouse 101.8K tons.
+Lithium: 7,7,2,8,9,4. Salt lake+mine, battery +5.71%, price 150K yuan/t.
+Polysilicon: 8,8,1,9,6,3. Solar oversupply, install -13.1%, price 37,850 yuan/t.
 
-## Baseline Parameters
-Copper: Supply 3, Demand 4, Profit 8, Inventory 3, Speculation 7, Verification 8. TC fee deeply negative (-182 USD/DT), LME copper at record high ($14,290/t), social inventory 1.287M tons declining, speculative funds active.
-Aluminum: Supply 5, Demand 6, Profit 7, Inventory 4, Speculation 5, Verification 7. AI computing + Golden September demand, alumina cost support, warehouse 262.5K tons declining.
-Lead: Supply 4, Demand 3, Profit 5, Inventory 5, Speculation 3, Verification 6. Secondary lead utilization 28%, auto battery demand, warehouse 57K tons high.
-Zinc: Supply 4, Demand 4, Profit 3, Inventory 6, Speculation 6, Verification 7. TC fee negative (-536 yuan/t), production cut expected, warehouse 114.7K tons rising.
-Tin: Supply 2, Demand 5, Profit 9, Inventory 2, Speculation 8, Verification 9. Mine supply rigid (Myanmar slow), AI demand (MLCC +30%), price 42,598 yuan/t, warehouse 5,564 tons.
-Nickel: Supply 6, Demand 5, Profit 4, Inventory 7, Speculation 7, Verification 5. Indonesia capacity release, stainless + EV demand, warehouse 101.8K tons.
-Lithium Carbonate: Supply 7, Demand 7, Profit 2, Inventory 8, Speculation 9, Verification 4. Salt lake + mine capacity, battery production +5.71%, price 150K yuan/t, margin 23% highest.
-Polysilicon: Supply 8, Demand 8, Profit 1, Inventory 9, Speculation 6, Verification 3. Solar overcapacity, June installation -13.1%, price 37,850 yuan/t.
-
-## Client Types
-1. Industrial: focus on supply, profit, inventory
-2. Speculator: focus on speculation, verification, risks
-3. Beginner: simple language, key bull/bear factors
-4. Internal colleague: both industry + market, ready-to-use scripts + tracking indicators
-
-Default: Internal colleague.
-
-## Output Rules
-1. Follow clockwise dimension logic
-2. Under 500 words
-3. Format: one-line conclusion + markdown scoring table + circular analysis + ECharts radar JSON (use triple backticks)
-4. End with disclaimer: 本内容仅模型投研演示，不构成任何投资建议
+Default client: internal colleague. Output: conclusion + scoring table + circular analysis + ECharts radar JSON (triple backticks). End with disclaimer.
 EOF
 
           RESPONSE=$(curl -s -X POST "https://token.sensenova.cn/v1/chat/completions" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${API_KEY}" \
+            -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" \
             -d "{
               \"model\": \"sensenova-6.8-flash-lite\",
               \"messages\": [
