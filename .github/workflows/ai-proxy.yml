@@ -1,62 +1,10 @@
-name: "AI Proxy"
-
-"on":
+name: AI Proxy
+on:
   push:
-    paths:
-      - 'query.txt'
-
 jobs:
   proxy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Call AI API
-        shell: bash
-        run: |
-          QUERY=$(cat query.txt | head -1)
-          echo "Query: $QUERY"
-
-          cat > /tmp/sys.txt << 'EOF'
-You are a senior non-ferrous metals analyst. Output analysis using Six-Dimension model (1-10 scores): Supply Elasticity, Demand Elasticity, Industry Profit, Inventory, Speculation Intensity, Verification.
-
-## Baseline
-Copper: 3,4,8,3,7,8. TC -182 USD/DT, LME $14,290/t record, inventory 1.287M tons down.
-Aluminum: 5,6,7,4,5,7. AI+Golden Sept demand, warehouse 262.5K tons down.
-Lead: 4,3,5,5,3,6. Secondary lead 28%, auto battery demand, warehouse 57K tons.
-Zinc: 4,4,3,6,6,7. TC -536 yuan/t, cuts expected, warehouse 114.7K tons up.
-Tin: 2,5,9,2,8,9. Mine rigid, AI+MLCC +30%, price 42,598 yuan/t, warehouse 5,564 tons.
-Nickel: 6,5,4,7,7,5. Indonesia supply, stainless+EV, warehouse 101.8K tons.
-Lithium: 7,7,2,8,9,4. Salt lake+mine, battery +5.71%, price 150K yuan/t.
-Polysilicon: 8,8,1,9,6,3. Solar oversupply, install -13.1%, price 37,850 yuan/t.
-
-Default client: internal colleague. Output: conclusion + scoring table + circular analysis + ECharts radar JSON (triple backticks). End with disclaimer.
-EOF
-
-          RESPONSE=$(curl -s -X POST "https://token.sensenova.cn/v1/chat/completions" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" \
-            -d "{
-              \"model\": \"sensenova-6.8-flash-lite\",
-              \"messages\": [
-                {\"role\": \"system\", \"content\": $(cat /tmp/sys.txt | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')},
-                {\"role\": \"user\", \"content\": \"$QUERY\"}
-              ],
-              \"temperature\": 0.4,
-              \"max_tokens\": 2000
-            }")
-
-          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('choices',[{'message':{'content':''}}])[0].get('message',{}).get('content',''))")
-
-          echo "$CONTENT" > analysis_output.md
-          echo "=== DONE ==="
-
-      - name: Save result
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add analysis_output.md
-          git commit -m "Update analysis" || echo "no changes"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Test
+        run: echo hello
