@@ -8,7 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Call sensenova API and save
+        with:
+          persist-credentials: true
+      - name: Call API and save
         run: |
           QUERY=$(head -1 query.txt)
           echo "Query: $QUERY"
@@ -16,26 +18,15 @@ jobs:
           RESPONSE=$(curl -s -X POST "https://token.sensenova.cn/v1/chat/completions" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" \
-            -d "{
-              \"model\": \"sensenova-6.8-flash-lite\",
-              \"messages\": [
-                {\"role\": \"system\", \"content\": \"You are a metals analyst. Six-Dimension model (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3. Output: conclusion + scoring table + circular analysis + ECharts radar JSON.\"},
-                {\"role\": \"user\", \"content\": \"$QUERY\"}
-              ],
-              \"temperature\": 0.4,
-              \"max_tokens\": 2000
-            }")
+            -d '{"model":"sensenova-6.8-flash-lite","messages":[{"role":"system","content":"You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3."},{"role":"user","content":"'"$QUERY"'"}],"max_tokens":2000}')
 
           CONTENT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('choices',[{'message':{'content':''}}])[0].get('message',{}).get('content',''))")
 
           echo "$CONTENT" > analysis_output.md
+          cat analysis_output.md
 
-          # Use GitHub API to commit
-          B64=$(base64 -w0 analysis_output.md)
-          TOKEN="$GITHUB_TOKEN"
-          curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"message\": \"Update analysis\", \"content\": \"$B64\", \"branch\": \"main\"}"
-
-          echo "DONE"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add analysis_output.md
+          git commit -m "Update analysis"
+          git push
