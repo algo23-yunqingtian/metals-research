@@ -122,7 +122,7 @@ const SYSTEM_PROMPT = `你是一名资深有色金属分析师，使用【六维
 ①核心一句话结论
 ②Markdown 打分表格（列：维度|分值(1-10)|简要说明）
 ③环形逻辑分析解读
-④输出完整可直接渲染的 ECharts radar option JSON 代码块，使用 ```json 包裹，不要额外修饰。radar 的 indicator 必须包含六个维度：供应弹性、需求弹性、产业链利润、产业库存、盘面投机参与强度、验证指标是否生效，max 均为 10，series.data[0].value 为对应六个维度分值数组。
+④输出完整可直接渲染的 ECharts radar option JSON 代码块，使用 三重反引号+json 包裹，不要额外修饰。radar 的 indicator 必须包含六个维度：供应弹性、需求弹性、产业链利润、产业库存、盘面投机参与强度、验证指标是否生效，max 均为 10，series.data[0].value 为对应六个维度分值数组。
 4. 末尾强制带上免责声明：本内容仅模型投研演示，不构成任何投资建议。`;
 
 const DIMENSIONS = ["供应弹性","需求弹性","产业链利润","产业库存","盘面投机参与强度","验证指标是否生效"];
@@ -224,7 +224,7 @@ async function submit(){
   const query = queryInput.value.trim();
   if(!query){ showToast("请输入查询指令"); return; }
   if(API_BASE_URL.includes("example") || API_KEY === "YOUR_AGENT_TOKEN"){
-    renderMarkdown("> ⚠️ **API 配置未就绪**\n>\n请先在源代码顶部修改 `API_BASE_URL`、`API_KEY`、`MODEL_NAME` 三个配置为有效的公网 Agent 信息后再提交。\n>\n```js\nconst API_BASE_URL = \"https://your-api.example.com/v1\";\nconst API_KEY      = \"YOUR_AGENT_TOKEN\";\nconst MODEL_NAME   = \"your-model-id\";\n```");
+    renderMarkdown("> ⚠️ **API 配置未就绪**\n>\n请先在源代码顶部修改 API_BASE_URL、API_KEY、MODEL_NAME 三个配置为有效的公网 Agent 信息后再提交。\n>\n需要配置：公网 API 地址（以 /v1 结尾）、你的 Agent Token、模型 ID。");
     return;
   }
   submitBtn.disabled = true;
