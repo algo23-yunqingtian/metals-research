@@ -35,8 +35,16 @@ jobs:
           TOKEN: $***
         run: |
           B64=$(base64 -w0 analysis_output.md)
-          curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"message\": \"Update\", \"content\": \"$B64\", \"branch\": \"main\"}"
+          SHA=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null)
+          if [ -n "$SHA" ] && [ "$SHA" != "None" ]; then
+            curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"message\": \"Update\", \"content\": \"$B64\", \"sha\": \"$SHA\", \"branch\": \"main\"}"
+          else
+            curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"message\": \"Create\", \"content\": \"$B64\", \"branch\": \"main\"}"
+          fi
           echo "SAVED"
