@@ -9,8 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Call sensenova API and save
-        env:
-          GH_TOKEN: *** github.token }}
         run: |
           QUERY=$(head -1 query.txt)
           echo "Query: $QUERY"
@@ -34,8 +32,9 @@ jobs:
 
           # Use GitHub API to commit
           B64=$(base64 -w0 analysis_output.md)
+          TOKEN="$GITHUB_TOKEN"
           curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
-            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"message\": \"Update analysis\", \"content\": \"$B64\", \"branch\": \"main\"}"
 
