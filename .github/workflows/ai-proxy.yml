@@ -21,17 +21,17 @@ jobs:
               {"role": "system", "content": "You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3."},
               {"role": "user", "content": "$QUERY"}
             ],
-            "max_tokens": 2000
+            "max_tokens": 5000
           }
           JSONEOF
           echo "Step 1: Call API"
-          HTTP_CODE=$(curl -s -w "%{http_code}" --max-time 90 -o /tmp/response.json -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d @/tmp/payload.json)
+          HTTP_CODE=$(curl -s -w "%{http_code}" --max-time 120 -o /tmp/response.json -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d @/tmp/payload.json)
           echo "HTTP: $HTTP_CODE"
           if [ "$HTTP_CODE" != "200" ]; then
             cat /tmp/response.json
             exit 1
           fi
-          CONTENT=$(python3 -c "import json; d=json.load(open('/tmp/response.json')); print(d.get('choices', [{'message': {'content': ''}}])[0].get('message', {}).get('content', ''))")
+          CONTENT=$(python3 -c "import json; d=json.load(open('/tmp/response.json')); msg=d.get('choices', [{'message': {}}])[0].get('message', {}); content=msg.get('content', ''); reasoning=msg.get('reasoning', ''); result=content if content else reasoning; print(result)")
           echo "Content length: ${#CONTENT}"
           echo "$CONTENT" > analysis_output.md
           echo "Step 2: Verify file"
