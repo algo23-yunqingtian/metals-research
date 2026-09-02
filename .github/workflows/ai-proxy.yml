@@ -13,14 +13,30 @@ jobs:
       - name: Run analysis
         run: |
           python3 << 'PYEOF'
-          import json, urllib.request, base64, os, time, sys
+          import json, urllib.request, base64, os, time, sys, socket
 
           query = open("query.txt").read().strip()
           print("Query:", query)
 
-          sys_prompt = "You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3. Output concise Chinese analysis."
+          sys_prompt = "You are a metals analyst. Output concise Chinese analysis."
 
-          for attempt in range(5):
+          # First, test connectivity with a simple request
+          print("Testing connectivity...")
+          for test in range(3):
+              try:
+                  test_payload = json.dumps({"model": "sensenova-6.8-flash-lite", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 10}).encode()
+                  req = urllib.request.Request("https://token.sensenova.cn/v1/chat/completions", data=test_payload, headers={"Content-Type": "application/json", "Authorization": "Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb"}, method="POST")
+                  resp = urllib.request.urlopen(req, timeout=30)
+                  data = json.loads(resp.read())
+                  print("Test OK:", data.get("model", ""))
+                  break
+              except Exception as e:
+                  print(f"Test {test+1} failed: {str(e)[:100]}")
+                  time.sleep(5)
+
+          # Now make the real request with retries
+          content = ""
+          for attempt in range(10):
               try:
                   payload = json.dumps({
                       "model": "sensenova-6.8-flash-lite",
@@ -36,24 +52,23 @@ jobs:
                       headers={"Content-Type": "application/json", "Authorization": "Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb"},
                       method="POST"
                   )
-                  resp = urllib.request.urlopen(req, timeout=120)
+                  resp = urllib.request.urlopen(req, timeout=180)
                   data = json.loads(resp.read())
                   msg = data.get("choices", [{"message": {}}])[0].get("message", {})
                   content = msg.get("content", "") or msg.get("reasoning", "")
-                  print("API success, content length:", len(content))
+                  print(f"Attempt {attempt+1} success, content length: {len(content)}")
                   break
               except Exception as e:
                   print(f"Attempt {attempt+1} failed: {str(e)[:200]}")
-                  time.sleep(10)
-                  content = ""
-          else:
+                  time.sleep(15)
+
+          if not content:
               print("ALL ATTEMPTS FAILED")
               sys.exit(1)
 
           open("analysis_output.md", "w").write(content)
           print("File written, size:", len(content))
 
-          # Save to GitHub
           token = os.environ.get("GITHUB_TOKEN", "")
           print("GITHUB_TOKEN present:", bool(token))
           b64 = base64.b64encode(content.encode()).decode()
