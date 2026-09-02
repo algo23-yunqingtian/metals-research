@@ -14,31 +14,16 @@ jobs:
         run: |
           QUERY=$(head -1 query.txt)
           echo "Query: $QUERY"
-          echo "Test 1: Simple curl"
-          curl -s --max-time 30 -o /tmp/r1.json -w "HTTP: %{http_code}\n" -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d '{"model":"sensenova-6.8-flash-lite","messages":[{"role":"user","content":"hi"}],"max_tokens":10}'
-          echo "Response 1:"
-          cat /tmp/r1.json
+          echo "=== STEP 1: Call sensenova API ==="
+          curl -v --max-time 60 -o /tmp/response.json -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d '{"model":"sensenova-6.8-flash-lite","messages":[{"role":"system","content":"You are a metals analyst."},{"role":"user","content":"'$QUERY'"}],"max_tokens":1000}'
+          echo "=== Response ==="
+          cat /tmp/response.json
           echo ""
-          echo "Test 2: Full payload"
-          cat > /tmp/payload.json << JSONEOF
-          {
-            "model": "sensenova-6.8-flash-lite",
-            "messages": [
-              {"role": "system", "content": "You are a metals analyst. Output a concise one-paragraph analysis in Chinese."},
-              {"role": "user", "content": "$QUERY"}
-            ],
-            "max_tokens": 5000
-          }
-          JSONEOF
-          HTTP_CODE=$(curl -s -w "%{http_code}" --max-time 120 -o /tmp/r2.json -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d @/tmp/payload.json)
-          echo "HTTP: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            cat /tmp/r2.json
-            exit 1
-          fi
-          CONTENT=$(python3 -c "import json; d=json.load(open('/tmp/r2.json')); msg=d.get('choices', [{'message': {}}])[0].get('message', {}); content=msg.get('content', ''); reasoning=msg.get('reasoning', ''); result=content if content else reasoning; print(result)")
+          echo "=== STEP 2: Extract ==="
+          CONTENT=$(python3 -c "import json; d=json.load(open('/tmp/response.json')); msg=d.get('choices', [{'message': {}}])[0].get('message', {}); content=msg.get('content', ''); reasoning=msg.get('reasoning', ''); print(content if content else reasoning)")
           echo "Content length: ${#CONTENT}"
           echo "$CONTENT" > analysis_output.md
+          echo "=== STEP 3: Save ==="
           B64=$(base64 -w0 analysis_output.md)
           curl -s -f -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}"
           echo "SAVED"
