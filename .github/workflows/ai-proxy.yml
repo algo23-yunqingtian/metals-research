@@ -8,8 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
       - name: Call API
         run: |
+          set -e
           QUERY=$(head -1 query.txt)
           echo "Query: $QUERY"
           python3 << 'PYEOF'
@@ -30,41 +33,13 @@ jobs:
           open("analysis_output.md", "w").write(content)
           print("API DONE, length:", len(content))
           PYEOF
-      - name: Save result via python
+      - name: Save result
         env:
-          TOKEN: *** GITHUB_TOKEN }}
+          GH_TOKEN: *** github.token }}
         run: |
-          python3 << 'PYEOF'
-          import json, urllib.request, base64, os
-          with open("analysis_output.md", "rb") as f:
-              b64 = base64.b64encode(f.read()).decode()
-          token = os.environ["TOKEN"]
-          print("TOKEN present:", bool(token), "len:", len(token))
-          print("B64 length:", len(b64))
-
-          url = "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md"
-
-          try:
-              get_resp = urllib.request.urlopen(urllib.request.Request(url, headers={"Authorization": "Bearer " + token}))
-              get_data = json.loads(get_resp.read())
-              sha = get_data.get("sha", "")
-              print("Current SHA:", sha[:20] if sha else "empty")
-          except urllib.error.HTTPError as e:
-              sha = ""
-              print("File not found, creating new. Status:", e.code)
-
-          body = json.dumps({
-              "message": "Update analysis",
-              "content": b64,
-              "sha": sha,
-              "branch": "main"
-          }).encode()
-          req = urllib.request.Request(url, data=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}, method="PUT")
-          try:
-              put_resp = urllib.request.urlopen(req)
-              put_data = json.loads(put_resp.read())
-              print("PUT OK, sha:", put_data.get("content", {}).get("sha", ""))
-          except urllib.error.HTTPError as e:
-              print("PUT error:", e.code, e.read().decode()[:200])
-          print("SAVED")
-          PYEOF
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add analysis_output.md
+          git commit -m "Update analysis"
+          git push
