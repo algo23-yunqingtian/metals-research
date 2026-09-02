@@ -9,14 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Call sensenova API
-        id: api
         run: |
-          echo "=== Repository dispatch received ==="
-          echo "Event action: ${{ github.event.action }}"
+          echo "=== Query received ==="
           echo "Query: ${{ github.event.client_payload.query }}"
+          echo "Key: [REDACTED]"
 
-          # Build the system prompt
-          cat > system_prompt.txt << 'SYSEOF'
+          # Build system prompt
+          cat > /tmp/system.txt << 'SYSEOF'
 你是一名资深有色金属分析师，使用【六维闭环周期分析模型】输出投研分析报告，面向公司业务同事，帮助他们服务客户、建立信任、促进客户转化。
 
 六个分析维度，按顺时针顺序：供应弹性 → 需求弹性 → 产业链利润 → 产业库存 → 盘面投机参与强度 → 验证指标是否生效，闭环循环。维度分值范围 1-10 分。
@@ -50,45 +49,37 @@ jobs:
 4. 末尾强制带上免责声明：本内容仅模型投研演示，不构成任何投资建议。
 SYSEOF
 
-          # Get the query from the event payload
+          # Get inputs from event
           QUERY='${{ github.event.client_payload.query }}'
-          echo "Query: $QUERY"
+          API_KEY='${{ github.event.client_payload.api_key }}'
 
           # Call sensenova API
-          API_KEY="${{ secrets.SENSONOVA_API_KEY }}"
-
           RESPONSE=$(curl -s -X POST "https://token.sensenova.cn/v1/chat/completions" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${API_KEY}" \
             -d "{
               \"model\": \"sensenova-6.8-flash-lite\",
               \"messages\": [
-                {\"role\": \"system\", \"content\": $(cat system_prompt.txt | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')},
+                {\"role\": \"system\", \"content\": $(cat /tmp/system.txt | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')},
                 {\"role\": \"user\", \"content\": \"${QUERY}\"}
               ],
               \"temperature\": 0.4,
               \"max_tokens\": 2000
             }")
 
-          # Extract the response content
-          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('choices',[{ 'message':{ 'content':'' }}])[0].get('message',{}).get('content',''))")
+          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('choices',[{'message':{'content':''}}])[0].get('message',{}).get('content',''))")
 
-          echo "=== API Response ==="
+          echo "=== Response ==="
           echo "$CONTENT"
-
-          # Write to output file
           echo "$CONTENT" > analysis_output.md
-
-          # Also write the raw response for debugging
-          echo "$RESPONSE" > analysis_raw.json
         shell: bash
 
       - name: Commit response
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add analysis_output.md analysis_raw.json
-          git commit -m "Update analysis result" || echo "No changes to commit"
+          git add analysis_output.md
+          git commit -m "Update analysis result" || echo "No changes"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
