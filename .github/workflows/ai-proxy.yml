@@ -12,20 +12,26 @@ jobs:
         run: |
           QUERY=$(head -1 query.txt)
           echo "Query: $QUERY"
-          echo "Step 1: Call sensenova API"
-          HTTP_CODE=$(curl -s -w "%{http_code}" --max-time 60 -o /tmp/sensenova_response.json -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d '{"model":"sensenova-6.8-flash-lite","messages":[{"role":"system","content":"You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3."},{"role":"user","content":"'$QUERY'"}],"max_tokens":2000}')
-          echo "HTTP code: $HTTP_CODE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "API error response:"
-            cat /tmp/sensenova_response.json
-            exit 1
-          fi
-          echo "Step 2: Extract content"
-          CONTENT=$(python3 -c "import json; d=json.load(open('/tmp/sensenova_response.json')); print(d.get('choices', [{'message': {'content': ''}}])[0].get('message', {}).get('content', ''))")
-          echo "Content length: ${#CONTENT}"
-          echo "$CONTENT" > analysis_output.md
-          echo "Step 3: Save to GitHub"
+          python3 << 'PYEOF'
+          import json, urllib.request
+          query = open("query.txt").read().strip()
+          payload = json.dumps({
+              "model": "sensenova-6.8-flash-lite",
+              "messages": [
+                  {"role": "system", "content": "You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3."},
+                  {"role": "user", "content": query}
+              ],
+              "max_tokens": 2000
+          }).encode()
+          req = urllib.request.Request("https://token.sensenova.cn/v1/chat/completions", data=payload, headers={"Content-Type": "application/json", "Authorization": "Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb"}, method="POST")
+          resp = urllib.request.urlopen(req, timeout=60)
+          data = json.loads(resp.read())
+          content = data.get("choices", [{"message": {"content": ""}}])[0].get("message", {}).get("content", "")
+          open("analysis_output.md", "w").write(content)
+          print("API DONE, length:", len(content))
+          PYEOF
+          echo "Step 2: Save to GitHub"
           B64=$(base64 -w0 analysis_output.md)
           SAVE_CODE=$(curl -s -w "%{http_code}" -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}")
-          echo "Save HTTP code: $SAVE_CODE"
+          echo "Save HTTP: $SAVE_CODE"
           echo "SAVED"
