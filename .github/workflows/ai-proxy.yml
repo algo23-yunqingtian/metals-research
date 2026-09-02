@@ -10,16 +10,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
-      - name: Write script
+      - name: Build and call API
+        shell: bash
         run: |
-          cat > /tmp/call_api.py << 'PYEOF'
+          set -e
+          QUERY=$(head -1 query.txt)
+          echo "Query: $QUERY"
+          python3 << 'PYEOF'
           import json, urllib.request
-          query = open('query.txt').read().strip()
-          sys_prompt = "You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3."
+          query = open("query.txt").read().strip()
           payload = json.dumps({
               "model": "sensenova-6.8-flash-lite",
               "messages": [
-                  {"role": "system", "content": sys_prompt},
+                  {"role": "system", "content": "You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3."},
                   {"role": "user", "content": query}
               ],
               "max_tokens": 2000
@@ -28,12 +31,9 @@ jobs:
           resp = urllib.request.urlopen(req)
           data = json.loads(resp.read())
           content = data.get("choices", [{"message": {"content": ""}}])[0].get("message", {}).get("content", "")
-          with open("analysis_output.md", "w") as f:
-              f.write(content)
+          open("analysis_output.md", "w").write(content)
           print("DONE")
           PYEOF
-      - name: Call API
-        run: python3 /tmp/call_api.py
       - name: Save
         run: |
           git config user.name "github-actions[bot]"
