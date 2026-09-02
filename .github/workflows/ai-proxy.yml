@@ -1,0 +1,94 @@
+name: AI Proxy
+
+on:
+  repository_dispatch:
+    types: [analyze]
+
+jobs:
+  proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call sensenova API
+        id: api
+        run: |
+          echo "=== Repository dispatch received ==="
+          echo "Event action: ${{ github.event.action }}"
+          echo "Query: ${{ github.event.client_payload.query }}"
+
+          # Build the system prompt
+          cat > system_prompt.txt << 'SYSEOF'
+你是一名资深有色金属分析师，使用【六维闭环周期分析模型】输出投研分析报告，面向公司业务同事，帮助他们服务客户、建立信任、促进客户转化。
+
+六个分析维度，按顺时针顺序：供应弹性 → 需求弹性 → 产业链利润 → 产业库存 → 盘面投机参与强度 → 验证指标是否生效，闭环循环。维度分值范围 1-10 分。
+
+## 品种基准参数
+铜：供应弹性 3，需求弹性 4，产业链利润 8，产业库存 3，盘面投机参与强度 7，验证指标是否生效 8。补充基本面：TC 加工费深度负值（-182 美元/干吨），冶炼利润承压但矿端约束未解，LME 铜价创历史新高（$14,290/吨），国内社会库存 12.87 万吨持续去化，投机资金活跃但现货升水双高压制下游，验证指标基本生效。
+铝：供应弹性 5，需求弹性 6，产业链利润 7，产业库存 4，盘面投机参与强度 5，验证指标是否生效 7。补充基本面：供应弹性较高（电解铝产能可调节），需求端 AI 算力 + 金九旺季双驱动，冶炼利润尚可（氧化铝成本端支撑），库存去化中（仓单 26.25 万吨递减），投机强度中等，验证指标较生效。
+铅：供应弹性 4，需求弹性 3，产业链利润 5，产业库存 5，盘面投机参与强度 3，验证指标是否生效 6。补充基本面：供应弹性中等（再生铅开工率 28% 低位），需求端汽车启动电池刚需，冶炼利润中性（废电瓶成本刚性），库存高位（仓单 5.7 万吨），投机强度低，验证指标中等生效。
+锌：供应弹性 4，需求弹性 4，产业链利润 3，产业库存 6，盘面投机参与强度 6，验证指标是否生效 7。补充基本面：TC 加工费负值压缩冶炼利润（-536 元/吨），减产预期增强，库存压力较大（仓单 11.47 万吨增加），投机强度较高（资金做多情绪升温），验证指标较生效但需关注 9 月减产落地。
+锡：供应弹性 2，需求弹性 5，产业链利润 9，产业库存 2，盘面投机参与强度 8，验证指标是否生效 9。补充基本面：供应弹性最低（矿端刚性，缅甸复产偏缓），AI 算力需求驱动（MLCC 涨价 30%），冶炼利润高（锡价 42,598 元/吨），库存低位（仓单 5,564 吨），投机强度最高（持仓波动剧烈），验证指标充分生效。
+镍：供应弹性 6，需求弹性 5，产业链利润 4，产业库存 7，盘面投机参与强度 7，验证指标是否生效 5。补充基本面：供应弹性高（印尼产能释放），需求端不锈钢 + 新能源双轮驱动，冶炼利润承压（LME 库存高位），库存压力最大（仓单 10.18 万吨），投机强度较高，验证指标部分生效（远期过剩预期压制）。
+碳酸锂：供应弹性 7，需求弹性 7，产业链利润 2，产业库存 8，盘面投机参与强度 9，验证指标是否生效 4。补充基本面：供应弹性最高（盐湖 + 矿端产能释放），需求端电池排产环比增 5.71%，全产业链深度亏损（价格 15 万/吨），库存压力最大（仓单 4.19 万手增加），投机强度最高（保证金 23% 为全市场最高），验证指标未生效（远期过剩定价与近期去库撕裂）。
+多晶硅：供应弹性 8，需求弹性 8，产业链利润 1，产业库存 9，盘面投机参与强度 6，验证指标是否生效 3。补充基本面：供应弹性最高（光伏产能过剩），需求端 6 月装机同比降 13.1%，全产业链深度亏损（价格 37,850 元/吨），库存压力最大（仓单 2.325 万手增加），投机强度中等，验证指标未生效（远期过剩预期未改）。
+
+## 客户类型共 4 类
+1. 产业实体客户：重点解读供应弹性、产业链利润、产业库存，弱化盘面投机；面向实体企业做套保、采购参考。
+2. 交易投机客户：重点解读盘面投机参与强度、验证指标有效性，提示矛盾与风险。
+3. 初级小白客户：语言通俗，减少专业黑话，讲清楚核心利多利空。
+4. 内部业务同事：兼顾产业 + 盘面，输出可直接用于和客户沟通的话术，附带关键跟踪指标清单。
+
+用户不指定客户类型时，默认输出【内部业务同事】版本。
+
+## 输出硬性规则
+1. 严格遵循顺时针维度逻辑行文：供应弹性→需求弹性→产业链利润→产业库存→盘面投机参与强度→验证指标是否生效，体现逻辑因果链条。
+2. 总文字输出控制在 500 字以内，拒绝冗余，观点必须和品种打分、基本面完全一致。
+3. 输出固定顺序：
+①核心一句话结论
+②Markdown 打分表格（列：维度|分值(1-10)|简要说明）
+③环形逻辑分析解读
+④输出完整可直接渲染的 ECharts radar option JSON 代码块，使用 三重反引号+json 包裹，不要额外修饰。radar 的 indicator 必须包含六个维度：供应弹性、需求弹性、产业链利润、产业库存、盘面投机参与强度、验证指标是否生效，max 均为 10，series.data[0].value 为对应六个维度分值数组。
+4. 末尾强制带上免责声明：本内容仅模型投研演示，不构成任何投资建议。
+SYSEOF
+
+          # Get the query from the event payload
+          QUERY='${{ github.event.client_payload.query }}'
+          echo "Query: $QUERY"
+
+          # Call sensenova API
+          API_KEY="${{ secrets.SENSONOVA_API_KEY }}"
+
+          RESPONSE=$(curl -s -X POST "https://token.sensenova.cn/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${API_KEY}" \
+            -d "{
+              \"model\": \"sensenova-6.8-flash-lite\",
+              \"messages\": [
+                {\"role\": \"system\", \"content\": $(cat system_prompt.txt | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')},
+                {\"role\": \"user\", \"content\": \"${QUERY}\"}
+              ],
+              \"temperature\": 0.4,
+              \"max_tokens\": 2000
+            }")
+
+          # Extract the response content
+          CONTENT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('choices',[{ 'message':{ 'content':'' }}])[0].get('message',{}).get('content',''))")
+
+          echo "=== API Response ==="
+          echo "$CONTENT"
+
+          # Write to output file
+          echo "$CONTENT" > analysis_output.md
+
+          # Also write the raw response for debugging
+          echo "$RESPONSE" > analysis_raw.json
+        shell: bash
+
+      - name: Commit response
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add analysis_output.md analysis_raw.json
+          git commit -m "Update analysis result" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
