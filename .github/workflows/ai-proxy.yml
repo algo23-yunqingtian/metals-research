@@ -6,6 +6,8 @@ on:
 jobs:
   proxy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Run analysis
@@ -22,8 +24,6 @@ jobs:
             "max_tokens": 2000
           }
           JSONEOF
-          echo "Payload:"
-          cat /tmp/payload.json
           echo "Step 1: Call API"
           HTTP_CODE=$(curl -s -w "%{http_code}" --max-time 90 -o /tmp/response.json -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d @/tmp/payload.json)
           echo "HTTP: $HTTP_CODE"
@@ -31,12 +31,17 @@ jobs:
             cat /tmp/response.json
             exit 1
           fi
-          echo "Step 2: Extract"
           CONTENT=$(python3 -c "import json; d=json.load(open('/tmp/response.json')); print(d.get('choices', [{'message': {'content': ''}}])[0].get('message', {}).get('content', ''))")
           echo "Content length: ${#CONTENT}"
           echo "$CONTENT" > analysis_output.md
+          echo "Step 2: Verify file"
+          ls -la analysis_output.md
+          wc -c analysis_output.md
+          head -c 100 analysis_output.md
+          echo ""
           echo "Step 3: Save"
           B64=$(base64 -w0 analysis_output.md)
-          SAVE_CODE=$(curl -s -w "%{http_code}" -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}")
-          echo "Save: $SAVE_CODE"
+          echo "B64 length: ${#B64}"
+          SAVE_RESP=$(curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}")
+          echo "Save response: ${SAVE_RESP:0:300}"
           echo "SAVED"
