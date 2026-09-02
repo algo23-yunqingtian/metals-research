@@ -34,17 +34,25 @@ jobs:
         env:
           TOKEN: $***
         run: |
+          set -e
           B64=$(base64 -w0 analysis_output.md)
-          SHA=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null)
+          echo "B64 length: ${#B64}"
+          GET_RESP=$(curl -s -H "Authorization: Bearer $TOKEN" "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md")
+          echo "GET response: ${GET_RESP:0:100}"
+          SHA=$(echo "$GET_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
+          echo "SHA: $SHA"
           if [ -n "$SHA" ] && [ "$SHA" != "None" ]; then
-            curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
+            echo "Updating existing file"
+            PUT_RESP=$(curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
-              -d "{\"message\": \"Update\", \"content\": \"$B64\", \"sha\": \"$SHA\", \"branch\": \"main\"}"
+              -d "{\"message\": \"Update\", \"content\": \"$B64\", \"sha\": \"$SHA\", \"branch\": \"main\"}")
           else
-            curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
+            echo "Creating new file"
+            PUT_RESP=$(curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
-              -d "{\"message\": \"Create\", \"content\": \"$B64\", \"branch\": \"main\"}"
+              -d "{\"message\": \"Create\", \"content\": \"$B64\", \"branch\": \"main\"}")
           fi
+          echo "PUT response: ${PUT_RESP:0:200}"
           echo "SAVED"
