@@ -12,18 +12,59 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run analysis
         run: |
-          QUERY=$(head -1 query.txt)
-          echo "Query: $QUERY"
-          echo "=== STEP 1: Call sensenova API ==="
-          curl -v --max-time 60 -o /tmp/response.json -X POST "https://token.sensenova.cn/v1/chat/completions" -H "Content-Type: application/json" -H "Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" -d '{"model":"sensenova-6.8-flash-lite","messages":[{"role":"system","content":"You are a metals analyst."},{"role":"user","content":"'$QUERY'"}],"max_tokens":1000}'
-          echo "=== Response ==="
-          cat /tmp/response.json
-          echo ""
-          echo "=== STEP 2: Extract ==="
-          CONTENT=$(python3 -c "import json; d=json.load(open('/tmp/response.json')); msg=d.get('choices', [{'message': {}}])[0].get('message', {}); content=msg.get('content', ''); reasoning=msg.get('reasoning', ''); print(content if content else reasoning)")
-          echo "Content length: ${#CONTENT}"
-          echo "$CONTENT" > analysis_output.md
-          echo "=== STEP 3: Save ==="
-          B64=$(base64 -w0 analysis_output.md)
-          curl -s -f -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\":\"Update\",\"content\":\"$B64\",\"branch\":\"main\"}"
-          echo "SAVED"
+          python3 << 'PYEOF'
+          import json, urllib.request, base64, os, time, sys
+
+          query = open("query.txt").read().strip()
+          print("Query:", query)
+
+          sys_prompt = "You are a metals analyst. Six-Dimension (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3. Output concise Chinese analysis."
+
+          for attempt in range(5):
+              try:
+                  payload = json.dumps({
+                      "model": "sensenova-6.8-flash-lite",
+                      "messages": [
+                          {"role": "system", "content": sys_prompt},
+                          {"role": "user", "content": query}
+                      ],
+                      "max_tokens": 5000
+                  }).encode()
+                  req = urllib.request.Request(
+                      "https://token.sensenova.cn/v1/chat/completions",
+                      data=payload,
+                      headers={"Content-Type": "application/json", "Authorization": "Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb"},
+                      method="POST"
+                  )
+                  resp = urllib.request.urlopen(req, timeout=120)
+                  data = json.loads(resp.read())
+                  msg = data.get("choices", [{"message": {}}])[0].get("message", {})
+                  content = msg.get("content", "") or msg.get("reasoning", "")
+                  print("API success, content length:", len(content))
+                  break
+              except Exception as e:
+                  print(f"Attempt {attempt+1} failed: {str(e)[:200]}")
+                  time.sleep(10)
+                  content = ""
+          else:
+              print("ALL ATTEMPTS FAILED")
+              sys.exit(1)
+
+          open("analysis_output.md", "w").write(content)
+          print("File written, size:", len(content))
+
+          # Save to GitHub
+          token = os.environ.get("GITHUB_TOKEN", "")
+          print("GITHUB_TOKEN present:", bool(token))
+          b64 = base64.b64encode(content.encode()).decode()
+          url = "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md"
+          body = json.dumps({"message": "Update", "content": b64, "branch": "main"}).encode()
+          req = urllib.request.Request(url, data=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}, method="PUT")
+          try:
+              resp = urllib.request.urlopen(req)
+              data = json.loads(resp.read())
+              print("SAVED sha:", data.get("content", {}).get("sha", ""))
+          except urllib.error.HTTPError as e:
+              print("SAVE HTTP", e.code, e.read().decode()[:300])
+              sys.exit(1)
+          PYEOF
