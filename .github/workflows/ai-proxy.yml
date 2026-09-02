@@ -32,9 +32,15 @@ jobs:
           PYEOF
       - name: Save via API
         run: |
-          set -e
-          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+          echo "Token len: ${#GITHUB_TOKEN}"
+          ls -la analysis_output.md
           B64=$(base64 -w0 analysis_output.md)
-          echo "B64 length: ${#B64}"
-          curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\": \"Update\", \"content\": \"$B64\", \"branch\": \"main\"}"
+          echo "B64 len: ${#B64}"
+          HTTP_CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d "{\"message\": \"Update\", \"content\": \"$B64\", \"branch\": \"main\"}")
+          echo "HTTP: $HTTP_CODE"
+          cat /tmp/resp.json
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+            echo "FAILED"
+            exit 1
+          fi
           echo "SAVED"
