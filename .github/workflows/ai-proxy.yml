@@ -8,12 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-      - name: Build and call API
-        shell: bash
+      - name: Call API
         run: |
-          set -e
           QUERY=$(head -1 query.txt)
           echo "Query: $QUERY"
           python3 << 'PYEOF'
@@ -34,19 +30,13 @@ jobs:
           open("analysis_output.md", "w").write(content)
           print("DONE")
           PYEOF
-      - name: Save
+      - name: Save result
+        env:
+          TOKEN: $***
         run: |
           B64=$(base64 -w0 analysis_output.md)
-          SHA=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
-          if [ -n "$SHA" ]; then
-            curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\": \"Update\", \"content\": \"$B64\", \"sha\": \"$SHA\", \"branch\": \"main\"}"
-          else
-            curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\": \"Create\", \"content\": \"$B64\", \"branch\": \"main\"}"
-          fi
+          curl -s -X PUT "https://api.github.com/repos/algo23-yunqingtian/metals-research/contents/analysis_output.md" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"message\": \"Update\", \"content\": \"$B64\", \"branch\": \"main\"}"
           echo "SAVED"
