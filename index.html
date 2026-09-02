@@ -85,10 +85,7 @@ html,body{height:100%;font-family:-apple-system,"Segoe UI","Microsoft YaHei",Rob
 // GitHub Token 被拆分以增强安全（查看源码无法直接复制使用）
 // =============================================================
 const _tk = ["ghp_d","T83LC","oECuT","duICrb","FB1dI","GoTS9G","aC2YqTti"];
-const GITHUB_TOKEN = _tk.join("");
-const GH_REPO = "algo23-yunqingtian/metals-research";
-const GH_API = "https://api.github.com";
-// =============================================================
+// API 配置
 
 const DIMENSIONS = ["供应弹性","需求弹性","产业链利润","产业库存","盘面投机参与强度","验证指标是否生效"];
 
@@ -126,6 +123,16 @@ const SYSTEM_PROMPT = `你是一名资深有色金属分析师，使用【六维
 
 const DIMENSIONS = ["供应弹性","需求弹性","产业链利润","产业库存","盘面投机参与强度","验证指标是否生效"];
 const COLORS = ["#4472C4","#4472C4","#4472C4","#4472C4","#4472C4","#4472C4"];
+
+const API_ENDPOINT = "https://token.sensenova.cn/v1/chat/completions";
+const API_KEY = "sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb";
+
+const CORS_PROXIES = [
+  { name: "direct", url: (u) => u, transform: null },
+  { name: "allorigins", url: (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u), transform: null },
+  { name: "corsproxy.io", url: (u) => "https://corsproxy.io/?" + encodeURIComponent(u), transform: null },
+  { name: "thingproxy", url: (u) => "https://thingproxy.freeboard.io/fetch/" + u, transform: null },
+];
 
 const outputEl = document.getElementById("output");
 const queryInput = document.getElementById("query-input");
@@ -219,6 +226,46 @@ function normalizeDimensions(values){
   return result.slice(0,6);
 }
 
+async function callAPI(query){
+  const payload = JSON.stringify({
+    model: "sensenova-6.8-flash-lite",
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: query }
+    ],
+    temperature: 0.4,
+    max_tokens: 5000
+  });
+
+  const lastErr = { msg: "" };
+  for(const proxy of CORS_PROXIES){
+    try{
+      const url = proxy.url(API_ENDPOINT);
+      outputEl.innerHTML += `<div style="color:#9aa3af;margin-top:4px;font-size:12px">尝试代理: ${proxy.name}</div>`;
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${API_KEY}`
+        },
+        body: payload
+      });
+
+      if(resp.ok){
+        const data = await resp.json();
+        const msg = data.choices && data.choices[0] ? data.choices[0].message : {};
+        return msg.content || msg.reasoning || "";
+      } else {
+        lastErr.msg = `${proxy.name} HTTP ${resp.status}`;
+      }
+    }catch(e){
+      lastErr.msg = `${proxy.name} ${e.message}`;
+    }
+  }
+  throw new Error("所有代理均失败: " + lastErr.msg);
+}
+
 async function submit(){
   const query = queryInput.value.trim();
   if(!query){ showToast("请输入查询指令"); return; }
@@ -227,57 +274,15 @@ async function submit(){
   outputEl.innerHTML = '<p style="color:#9aa3af;text-align:center;margin:20px 0"><span class="spinner"></span>分析中，请稍候…</p>';
   clearRadar();
   try{
-    // 1. 触发 GitHub Actions workflow
-    outputEl.innerHTML += '<div style="color:#4472C4;margin-top:12px;font-size:13px">1/3 正在提交分析任务…</div>';
-    const dispatchResp = await fetch(`${GH_API}/repos/${GH_REPO}/dispatches`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/vnd.github+json",
-        "Authorization": `Bearer ${GITHUB_TOKEN}`
-      },
-      body: JSON.stringify({
-        event_type: "analyze",
-        client_payload: { query: query, api_key: "sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb" }
-      })
-    });
-    if(!dispatchResp.ok){
-      const err = await dispatchResp.text().catch(()=>dispatchResp.status.toString());
-      throw new Error(`提交任务失败（HTTP ${dispatchResp.status}）：${err.slice(0,200)}`);
+    outputEl.innerHTML += '<div style="color:#4472C4;margin-top:12px;font-size:13px">正在调用模型，请稍候…</div>';
+    const content = await callAPI(query);
+    if(!content || content.length < 20){
+      throw new Error("模型返回内容为空，请重试");
     }
-    outputEl.innerHTML += '<div style="color:#4472C4;margin-top:8px;font-size:13px">2/3 任务已提交，等待分析结果…</div>';
-
-    // 2. 轮询结果文件
-    let attempts = 0;
-    const maxAttempts = 60;
-    let resultContent = null;
-
-    while(attempts < maxAttempts){
-      await new Promise(r => setTimeout(r, 3000));
-      attempts++;
-      outputEl.innerHTML += `<div style="color:#9aa3af;margin-top:4px;font-size:12px">等待中… (${attempts}s)</div>`;
-
-      try{
-        const fileResp = await fetch(`${GH_API}/repos/${GH_REPO}/contents/analysis_output.md`, {
-          headers: { "Authorization": `Bearer ${GITHUB_TOKEN}`, "Accept": "application/vnd.github+json" }
-        });
-        if(fileResp.ok){
-          const data = await fileResp.json();
-          resultContent = Buffer.from(data.content, 'base64').toString('utf8');
-          break;
-        }
-      }catch(e){ /* keep polling */ }
-    }
-
-    if(!resultContent){
-      throw new Error("分析超时，请稍后重试（可能是模型响应较慢）");
-    }
-
-    // 3. 渲染结果
-    renderMarkdown(resultContent);
-    const values = extractRadarValues(resultContent);
+    renderMarkdown(content);
+    const values = extractRadarValues(content);
     if(values) renderRadar(normalizeDimensions(values));
-
+    outputEl.innerHTML += '<div style="color:#16a34a;margin-top:12px;font-size:12px;text-align:right">✓ 分析完成</div>';
   }catch(err){
     renderMarkdown(`> ❌ **分析出错**\n>\n\`${err.message}\`\n>\n请检查网络连接或稍后重试。`);
   }finally{
