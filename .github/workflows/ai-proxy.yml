@@ -13,49 +13,31 @@ jobs:
         run: |
           QUERY=$(head -1 query.txt)
           echo "Query: $QUERY"
-
-          cat > /tmp/sys.txt << 'SYSEOF'
-You are a senior non-ferrous metals analyst using Six-Dimension Closed-Loop Model. Output for business colleagues.
-
-Dimensions (score 1-10): Supply Elasticity, Demand Elasticity, Industry Profit, Inventory, Speculation, Verification.
-
-Baseline: Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium Carbonate 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3.
-
-Output: one-line conclusion + scoring table + circular analysis + ECharts radar JSON in code block. End with disclaimer.
-SYSEOF
-
-          python3 << 'PYEOF'
-import json, subprocess
-sys_prompt = open('/tmp/sys.txt').read()
-query = open('query.txt').read().strip()
-payload = {
-    "model": "sensenova-6.8-flash-lite",
-    "messages": [
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": query}
-    ],
-    "temperature": 0.4,
-    "max_tokens": 2000
-}
-result = subprocess.run([
-    'curl', '-s', '-X', 'POST',
-    'https://token.sensenova.cn/v1/chat/completions',
-    '-H', 'Content-Type: application/json',
-    '-H', 'Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb',
-    '-d', json.dumps(payload)
-], capture_output=True, text=True)
-data = json.loads(result.stdout)
-content = data.get('choices', [{'message': {'content': ''}}])[0].get('message', {}).get('content', '')
-with open('analysis_output.md', 'w') as f:
-    f.write(content)
-print('DONE')
-PYEOF
-      - name: Save result
+          SYS_PROMPT="You are a metals analyst. Use Six-Dimension model (1-10): Supply, Demand, Profit, Inventory, Speculation, Verification. Copper 3,4,8,3,7,8. Aluminum 5,6,7,4,5,7. Lead 4,3,5,5,3,6. Zinc 4,4,3,6,6,7. Tin 2,5,9,2,8,9. Nickel 6,5,4,7,7,5. Lithium 7,7,2,8,9,4. Polysilicon 8,8,1,9,6,3. Output: conclusion + table + analysis + radar JSON."
+          python3 -c "
+          import json, subprocess
+          q = open('query.txt').read().strip()
+          p = {
+              'model': 'sensenova-6.8-flash-lite',
+              'messages': [
+                  {'role': 'system', 'content': '''$SYS_PROMPT'''},
+                  {'role': 'user', 'content': q}
+              ],
+              'temperature': 0.4,
+              'max_tokens': 2000
+          }
+          r = subprocess.run(['curl', '-s', '-X', 'POST', 'https://token.sensenova.cn/v1/chat/completions', '-H', 'Content-Type: application/json', '-H', 'Authorization: Bearer sk-npNImIR95e1f7xp17lqhv1ZuLwrmx5nb', '-d', json.dumps(p)], capture_output=True, text=True)
+          d = json.loads(r.stdout)
+          c = d.get('choices', [{'message': {'content': ''}}])[0].get('message', {}).get('content', '')
+          open('analysis_output.md', 'w').write(c)
+          print('DONE')
+          "
+      - name: Save
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add analysis_output.md
-          git commit -m "Update analysis" || echo "no changes"
+          git commit -m "Update" || echo skip
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
